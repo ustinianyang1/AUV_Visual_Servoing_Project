@@ -8,7 +8,8 @@ function Plot_Results(simOut)
     if size(v, 2) ~= 6; v = v'; end
     if size(tau, 2) ~= 6; tau = tau'; end
 
-    eta_d = [-0.04; 3.52; 3.45; 0; 0; -1.87]; % 目标位姿
+    % --- 关键修复：更换为论文 Table III 真实的期望物理位姿 ---
+    eta_d = [1.9; 4.5; 0.5; 0; 0; -1.87]; 
 
     % 图3：位姿响应
     figure('Name', 'Pose Response', 'Position', [100, 100, 1000, 600]);
@@ -16,11 +17,8 @@ function Plot_Results(simOut)
     for i = 1:6
         subplot(2, 3, i);
         plot(t, eta(:, i), 'b', 'LineWidth', 1.5); hold on;
-        if i == 3 || i == 6
-            plot(t, eta_d(i)*ones(size(t)), 'k--', 'LineWidth', 1);
-        elseif i == 4 || i == 5
-            plot(t, zeros(size(t)), 'k--', 'LineWidth', 1);
-        end
+        % 绘制目标虚线
+        plot(t, eta_d(i)*ones(size(t)), 'k--', 'LineWidth', 1);
         title(titles_eta{i}); xlabel('time (s)'); grid on; xlim([0, 120]);
     end
 
@@ -46,7 +44,7 @@ function Plot_Results(simOut)
     % 计算稳态误差
     idx_steady = find(t >= 110);
     if ~isempty(idx_steady)
-        MAE_eta = mean(abs(eta(idx_steady, :) - [eta(1,1:2), eta_d(3:6)']));
+        MAE_eta = mean(abs(eta(idx_steady, :) - eta_d'));
         MAE_v = mean(abs(v(idx_steady, :)));
         disp('【位姿稳态绝对误差 [x, y, z, phi, theta, psi]】:');
         fprintf('%.4f  %.4f  %.4f  %.4f  %.4f  %.4f\n', MAE_eta);
