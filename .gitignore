@@ -1,0 +1,20 @@
+# MATLAB/Simulink generated files
+slprj/
+*.slxc
+*.autosave
+*.asv
+
+# MATLAB code generation and build artifacts
+codegen/
+*.mex*
+*.obj
+*.o
+*.pdb
+
+# MATLAB project/session files
+*.prj.bak
+*.m~
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
