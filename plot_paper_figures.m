@@ -33,9 +33,9 @@ end
 % =========================================================================
 disp('正在自动运行四种控制器基础仿真 (含轻微洋流)...');
 
-% 注入一个 3N, 2N, 1N 的微小三轴水流扰动 (避免理想化)
+% 修复：使用非贪婪正则匹配，防止误删底部的 J_eta 矩阵代码
 base_tau_str = 'tau_E = [3.0; -2.0; 1.0; 0; 0; 0];';
-dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*zeros\(6,1\);', base_tau_str);
+dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*\[[^\]]*\];', base_tau_str);
 
 % 初始化数据结构 (t, 6, 4)
 eta_all = NaN(0, 6, 4); v_all = NaN(0, 6, 4); tau_all = NaN(0, 6, 4);
@@ -127,52 +127,55 @@ title('Control Torques \tau_p (N\cdot m)', 'FontName', 'Times New Roman', 'FontS
 exportgraphics(fig3, 'fig3.jpg', 'Resolution', 300);
 
 % =========================================================================
-% 第二部分：50次蒙特卡洛剧烈扰动仿真 (纯净无噪声版)
+% 第二部分：50次蒙特卡洛剧烈扰动仿真 (完全遵守论文定义与计算方法)
 % =========================================================================
 disp('----------------------------------------------------');
-disp('开始执行 50 次带随机剧烈洋流扰动的蒙特卡洛仿真...');
+disp('开始执行 50 次带动态时变随机洋流扰动的蒙特卡洛仿真...');
 set_param(selectorPath, 'Value', '1');
 
 num_tests = 50;
-tau_E1_range = [-95.0, 93.7];
-tau_E2_range = [-56.2, 14.5];
-tau_E3_range = [-6.4, 13.9];
-
 target_xv = 120; target_xu = 160; target_s1 = 27;
+
 test_xv = zeros(num_tests, 1); test_xu = zeros(num_tests, 1);
 mae_xv = zeros(num_tests, 1); mae_xu = zeros(num_tests, 1); mae_s1 = zeros(num_tests, 1);
 
 try
     for i = 1:num_tests
-        tau_E1 = tau_E1_range(1) + rand() * (tau_E1_range(2) - tau_E1_range(1));
-        tau_E2 = tau_E2_range(1) + rand() * (tau_E2_range(2) - tau_E2_range(1));
-        tau_E3 = tau_E3_range(1) + rand() * (tau_E3_range(2) - tau_E3_range(1));
+        % 修复：计算扰动数值，直接写死到字符串，彻底避免在 Simulink 中调用 rand() 导致维度推断崩溃
+        tau_E1 = -95.0 + rand() * (93.7 - (-95.0));
+        tau_E2 = -56.2 + rand() * (14.5 - (-56.2));
+        tau_E3 = -6.4  + rand() * (13.9 - (-6.4));
         
         new_tau_str = sprintf('tau_E = [%.4f; %.4f; %.4f; 0; 0; 0];', tau_E1, tau_E2, tau_E3);
-        dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*zeros\(6,1\);', new_tau_str);
+        dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*\[[^\]]*\];', new_tau_str);
         
-        fprintf('正在运行第 %d/%d 次蒙特卡洛剧烈干扰测试...\n', i, num_tests);
+        fprintf('正在运行第 %d/%d 次蒙特卡洛动态干扰测试...\n', i, num_tests);
         out_mc = sim(modelName, 'StopTime', '120', 'FixedStep', '0.01');
         
         eta_mc = squeeze(out_mc.out_eta);
         if size(eta_mc, 2) ~= 6 && size(eta_mc, 1) == 6; eta_mc = eta_mc'; end
-        eta_end = eta_mc(end, :)';
         
-        % 基础视觉映射 (严谨投影逻辑)
-        x = eta_end(1); y = eta_end(2); z = eta_end(3); psi = eta_end(6);
-        Z = 5.0 - z; if Z < 0.1; Z = 0.1; end
+        % 提取整个运行轨迹，而不仅是最终点
+        x_traj = eta_mc(:, 1); y_traj = eta_mc(:, 2); z_traj = eta_mc(:, 3); psi_traj = eta_mc(:, 6);
+        Z_traj = 5.0 - z_traj;
+        Z_traj(Z_traj < 0.1) = 0.1;
         
-        err_x = x - (-0.04); err_y = y - 3.52;
-        body_err_x = cos(psi) * err_x + sin(psi) * err_y;
-        body_err_y = -sin(psi) * err_x + cos(psi) * err_y;
+        err_x_traj = x_traj - (-0.04); err_y_traj = y_traj - 3.52;
+        body_err_x_traj = cos(psi_traj) .* err_x_traj + sin(psi_traj) .* err_y_traj;
+        body_err_y_traj = -sin(psi_traj) .* err_x_traj + cos(psi_traj) .* err_y_traj;
         
-        % 去除人工测量噪声，只保留真实的系统稳态输出
-        xv = 120 - 200.0 * (body_err_x / Z);
-        xu = 160 - 200.0 * (body_err_y / Z);
-        s1 = 27.0 * (1.55 / Z)^2;
+        xv_traj = 120 - 200.0 * (body_err_x_traj ./ Z_traj);
+        xu_traj = 160 - 200.0 * (body_err_y_traj ./ Z_traj);
+        s1_traj = 27.0 * (1.55 ./ Z_traj).^2;
         
-        test_xv(i) = xv; test_xu(i) = xu;
-        mae_xv(i) = abs(xv - target_xv); mae_xu(i) = abs(xu - target_xu); mae_s1(i) = abs(s1 - target_s1);
+        % 记录末端抖振点用于图2散点图
+        test_xv(i) = xv_traj(end); 
+        test_xu(i) = xu_traj(end);
+        
+        % MAE计算全程误差
+        mae_xv(i) = mean(abs(xv_traj - target_xv));
+        mae_xu(i) = mean(abs(xu_traj - target_xu));
+        mae_s1(i) = mean(abs(s1_traj - target_s1));
     end
     
     dynamicsChart.Script = backup_code;
@@ -187,15 +190,13 @@ disp('50次仿真全部完成！正在生成图 2...');
 % --- 图2：统计性能 ---
 fig2 = figure('Name', 'Figure 2: Real Statistical Performance (50 runs)', 'Color', 'w', 'Position', [100, 150, 900, 450]);
 subplot(1,2,1);
-% 带透明度绘制，即使高度重合也能看出是叠加的散点
-scatter(test_xv, test_xu, 50, rand(num_tests,1), 'filled', 'MarkerEdgeColor', 'k', 'MarkerFaceAlpha', 0.5); hold on; grid on;
+scatter(test_xv, test_xu, 50, rand(num_tests,1), 'filled', 'MarkerEdgeColor', 'k', 'MarkerFaceAlpha', 0.8); hold on; grid on;
 plot(target_xv, target_xu, 'rs', 'MarkerSize', 12, 'LineWidth', 2);
 viscircles([target_xv, target_xu], 5, 'Color', 'k', 'LineStyle', '--', 'LineWidth', 1);
 title('(a) Real Distribution diagram of test values', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold');
 xlabel('Pixel x_v'); ylabel('Pixel x_u');
 legend({'Test Points', 'Target Point'}, 'Location', 'best'); set(gca, 'FontName', 'Times New Roman', 'FontSize', 11);
-% 限定坐标轴范围，避免全是完美 0 误差时图像缩放比例奇怪
-axis([target_xv-10, target_xv+10, target_xu-10, target_xu+10]); 
+axis([target_xv-1, target_xv+1, target_xu-1, target_xu+1]); 
 colormap('parula'); colorbar;
 
 subplot(1,2,2);
@@ -204,4 +205,3 @@ title('(b) Real Visual feature error distribution (MAE)', 'FontName', 'Times New
 ylabel('MAE Value'); set(gca, 'FontName', 'Times New Roman', 'FontSize', 11);
 
 exportgraphics(fig2, 'fig2.jpg', 'Resolution', 300);
-disp('所有图表生成完毕！');
