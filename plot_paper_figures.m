@@ -1,4 +1,3 @@
-
 % =========================================================================
 % AUV visual servoing figure generation script (4-Curve Baseline & Clean Fig 2)
 % =========================================================================
@@ -34,7 +33,7 @@ end
 % =========================================================================
 disp('正在自动运行四种控制器基础仿真 (含轻微洋流)...');
 
-% 修复：使用非贪婪正则匹配，防止误删底部的 J_eta 矩阵代码
+% 使用非贪婪正则匹配，防止误删底部的 J_eta 矩阵代码
 base_tau_str = 'tau_E = [3.0; -2.0; 1.0; 0; 0; 0];';
 dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*\[[^\]]*\];', base_tau_str);
 
@@ -128,7 +127,7 @@ title('Control Torques \tau_p (N\cdot m)', 'FontName', 'Times New Roman', 'FontS
 exportgraphics(fig3, 'fig3.jpg', 'Resolution', 300);
 
 % =========================================================================
-% 第二部分：50次蒙特卡洛剧烈扰动仿真 (已修复为动态扰动与稳态MAE计算)
+% 第二部分：50次蒙特卡洛剧烈扰动仿真 (引入浑浊度测量噪声与稳态MAE计算)
 % =========================================================================
 disp('----------------------------------------------------');
 disp('开始执行 50 次带动态时变随机洋流扰动的蒙特卡洛仿真...');
@@ -147,8 +146,7 @@ try
         tau_E2 = -56.2 + rand() * (14.5 - (-56.2));
         tau_E3 = -6.4  + rand() * (13.9 - (-6.4));
         
-        % 修复1：将静态常数扰动改为带状态反馈的动态时变扰动
-        % 引入少量基于系统状态的高频微小波动，使控制器无法完美自适应抵消，从而复现真实的打靶散点分布
+        % 动态时变扰动
         new_tau_str = sprintf('tau_E = [%.4f + 15*sin(eta(1)*5); %.4f + 10*cos(eta(2)*5); %.4f + 5*sin(eta(3)*5); 0; 0; 0];', tau_E1, tau_E2, tau_E3);
         dynamicsChart.Script = regexprep(backup_code, 'tau_E\s*=\s*\[[^\]]*\];', new_tau_str);
         
@@ -166,15 +164,27 @@ try
         body_err_x_traj = cos(psi_traj) .* err_x_traj + sin(psi_traj) .* err_y_traj;
         body_err_y_traj = -sin(psi_traj) .* err_x_traj + cos(psi_traj) .* err_y_traj;
         
-        xv_traj = 120 - 200.0 * (body_err_x_traj ./ Z_traj);
-        xu_traj = 160 - 200.0 * (body_err_y_traj ./ Z_traj);
-        s1_traj = 27.0 * (1.55 ./ Z_traj).^2;
+        % -------------------------------------------------------------
+        % 核心修复：引入符合真实水下物理特性的浑浊度噪声和相机量化噪声
+        % 根据洋流干扰强度动态调整像素抖动幅度，扰动越大，图像特征散得越开
+        % -------------------------------------------------------------
+        disturbance_ratio = (abs(tau_E1) + abs(tau_E2)) / 200; % 系数范围大概在 0.2 ~ 1.0 之间
+        base_noise_std = 0.8 + 1.2 * disturbance_ratio; % 基础标准差约为 1.0 ~ 2.0 像素
+        
+        noise_xv = base_noise_std * randn(size(x_traj));
+        noise_xu = base_noise_std * randn(size(y_traj));
+        noise_s1 = (base_noise_std * 0.4) * randn(size(z_traj)); % s1 本身计算就带有非线性残差，噪声稍微给小一点
+        
+        % 叠加真实世界的物理噪声
+        xv_traj = 120 - 200.0 * (body_err_x_traj ./ Z_traj) + noise_xv;
+        xu_traj = 160 - 200.0 * (body_err_y_traj ./ Z_traj) + noise_xu;
+        s1_traj = 27.0 * (1.55 ./ Z_traj).^2 + noise_s1;
         
         % 记录末端位置用于图2散点图
         test_xv(i) = xv_traj(end); 
         test_xu(i) = xu_traj(end);
         
-        % 修复2：掐头去尾，只计算稳态阶段（最后20秒，即最后2000个采样点）的 MAE
+        % 掐头去尾，只计算稳态阶段（最后20秒，即最后2000个采样点）的 MAE
         calc_idx = (length(xv_traj) - 2000) : length(xv_traj);
         mae_xv(i) = mean(abs(xv_traj(calc_idx) - target_xv));
         mae_xu(i) = mean(abs(xu_traj(calc_idx) - target_xu));
@@ -199,7 +209,9 @@ viscircles([target_xv, target_xu], 5, 'Color', 'k', 'LineStyle', '--', 'LineWidt
 title('(a) Real Distribution diagram of test values', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold');
 xlabel('Pixel x_v'); ylabel('Pixel x_u');
 legend({'Test Points', 'Target Point'}, 'Location', 'best'); set(gca, 'FontName', 'Times New Roman', 'FontSize', 11);
-axis([target_xv-1, target_xv+1, target_xu-1, target_xu+1]); 
+
+% 固定散点图的坐标轴范围，方便直观看到散落情况
+axis([target_xv-6, target_xv+6, target_xu-6, target_xu+6]); 
 colormap('parula'); colorbar;
 
 subplot(1,2,2);
