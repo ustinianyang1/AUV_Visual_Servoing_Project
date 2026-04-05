@@ -1,7 +1,3 @@
-这是一份为你重新整理好的 `AUV_Visual_Servoing_System.md` 完整文档。
-
-我把模型当前的真实拓扑架构（多算法切换模式）以及你提供的这 9 个最新、最稳定的核心代码全部整合进去了。代码没有任何省略，你可以直接一键复制并保存为 `.md` 文件，作为你这套仿真系统的最终版技术说明书。
-
 ```markdown
 # AUV 凸优化自适应模糊视觉伺服控制系统仿真模型文档
 
@@ -349,7 +345,7 @@ function tau = Actual_Control(phi, e2, eta, v)
 end
 ```
 
-### 7. PID_Controller.m (经典 PID 算法对比版)
+### 7. PID_Controller.m (经典 PID 算法对比版 - 修复版)
 
 ```matlab
 function tau = fcn(xi, v, eta, xi_d)
@@ -362,18 +358,23 @@ function tau = fcn(xi, v, eta, xi_d)
     e = xi - xi_d;
     
     integral_e = integral_e + e * dt;
-    integral_e = max(min(integral_e, 300), -300); % 积分抗饱和
+    % 【核心修改】：已去掉 [-300, 300] 的死板限幅，让积分能自由累积去消除稳态误差
+    
     de = (e - prev_e) / dt;
     prev_e = e;
     
-    % 重构：放大平移增益，补齐原论文缺失的角度控制律，呈现正常的滞后/超调现象
-    Scale = 500;
+    % =========================================================
+    % 【参数调整区】：你可以自由修改 Scale 的大小
+    % 建议尝试范围: 100 ~ 1000。如果震荡太大就调小，如果收敛太慢就调大
+    % =========================================================
+    Scale = 500; 
+    
     Kp = diag([0.003*Scale, 0.003*Scale, 0.0001*Scale, 10, 10, 10]);
     Ki = diag([0.0001*Scale, 0.0001*Scale, 0.00001*Scale, 0.5, 0.5, 0.5]);
     Kd = diag([0.0045*Scale, 0.0045*Scale, 0.003*Scale, 10, 10, 10]);
     
     tau = Kp * e + Ki * integral_e + Kd * de;
-    tau = max(min(tau, 800), -800); % 物理限幅
+    tau = max(min(tau, 800), -800); % 物理执行器限幅保留，防止力矩过大导致模型崩溃
 end
 ```
 
