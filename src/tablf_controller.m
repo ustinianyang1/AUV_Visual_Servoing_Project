@@ -46,19 +46,19 @@ function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d,
         if khi < 1e-4, khi = 1e-4; end
         if kli < 1e-4, kli = 1e-4; end
         
-        % Constrain z strictly inside bounds to prevent singularity during numerical integration
-        max_ratio = 0.90; % Saturate ratio to prevent numeric blowup in explicit Euler
+        % BLF Numerical safety lock: Prevent evaluating exact singularity in discrete time
+        max_ratio = 0.99; 
         if z >= khi * max_ratio, z = khi * max_ratio; end
         if z <= -kli * max_ratio, z = -kli * max_ratio; end
         
         % 1. Evaluate Term 1 for Lambda
-        % num1 = (1-q) * kli^2 * sin(pi*z^2 / (2*kli^2)) + q * khi^2 * sin(pi*z^2 / (2*khi^2))
-        num1 = (1-q) * kli^2 * sin(pi * z^2 / (2 * kli^2)) + q * khi^2 * sin(pi * z^2 / (2 * khi^2));
+        % num1 = (1-q) * kli^2 * tan(pi*z^2 / (2*kli^2)) + q * khi^2 * tan(pi*z^2 / (2*khi^2))
+        num1 = (1-q) * kli^2 * tan(pi * z^2 / (2 * kli^2)) + q * khi^2 * tan(pi * z^2 / (2 * khi^2));
         
         % Use Taylor expansion / l'hopital around z=0 to prevent divide-by-zero
         if abs(z) < 1e-5
-            % limit of num1 / z as z->0 is actually 0 since sin(z^2) ~ z^2.
-            % Specifically: sin(pi z^2 / 2 k^2) ~ pi z^2 / 2 k^2.
+            % limit of num1 / z as z->0 is actually 0 since tan(z^2) ~ z^2.
+            % Specifically: tan(pi z^2 / 2 k^2) ~ pi z^2 / 2 k^2.
             % So num1 ~ k^2 * (pi z^2 / 2 k^2) = (pi/2) z^2.
             % And num1 / (2*pi*z) ~ ((pi/2)*z^2) / (2*pi*z) = z / 4.
             term1 = -K3i(i) * (z / 4);

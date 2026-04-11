@@ -10,7 +10,7 @@ disp('Initializing TABLF and ESN Simulation...');
 params = blimp_params_init();
 
 % Time Config for integration and ESN
-dt = 0.01;
+dt = 0.001; % Use finer step 1ms to stabilize bare TABLF without magic limiters
 T_end = 25;
 N = floor(T_end / dt);
 t_span = (0:N-1) * dt;
@@ -181,23 +181,37 @@ for k = 1:N-1
         break; % exit loop on divergence
     end
 
-    % 3. Blimp Actual Dynamics Update (Plant)
-    % Non-linear drag and coriolis C*nu
-    C_mat = zeros(4,4);
-    C_mat(1,4) = -params.my * x2(2,k) - params.mR * params.xg * x2(4,k);
-    C_mat(2,4) =  params.mx * x2(1,k);
-    C_mat(4,1) =  params.my * x2(2,k) + params.mR * params.xg * x2(4,k);
-    C_mat(4,2) = -params.mx * x2(1,k);
-    
-    % Plant ODE: dot_x2 = M^{-1} * (Tau_total - C*x2 - D*x2) + external_d
+    % 3. Blimp Actual Dynamics Update (Plant) using RK4 to prevent BLF saturation explosion
     wind_disturbance = 0; % Set to const logic or zeros for standard
     tau_total = tau_c(:,k) + wind_disturbance;
     
-    d_x2 = params.M \ (tau_total - C_mat * x2(:,k) - params.D * x2(:,k));
-    d_x1 = J * x2(:,k);
+    f_dx1 = @(psi_ang, vel) [cos(psi_ang), -sin(psi_ang), 0, 0; 
+                             sin(psi_ang),  cos(psi_ang), 0, 0; 
+                             0,             0,            1, 0; 
+                             0,             0,            0, 1] * vel;
+                         
+    C_mat_f = @(vel) [0, 0, 0, -params.my*vel(2) - params.mR*params.xg*vel(4); 
+                      0, 0, 0,  params.mx*vel(1); 
+                      0, 0, 0,  0; 
+                      params.my*vel(2) + params.mR*params.xg*vel(4), -params.mx*vel(1), 0, 0];
+                  
+    f_dx2 = @(vel) params.M \ (tau_total - C_mat_f(vel) * vel - params.D * vel);
+
+    % RK4 Steps
+    k1_x1 = f_dx1(x1(4,k), x2(:,k));
+    k1_x2 = f_dx2(x2(:,k));
     
-    x1(:, k+1) = x1(:, k) + d_x1 * dt;
-    x2(:, k+1) = x2(:, k) + d_x2 * dt;
+    k2_x1 = f_dx1(x1(4,k) + 0.5*dt*k1_x1(4), x2(:,k) + 0.5*dt*k1_x2);
+    k2_x2 = f_dx2(x2(:,k) + 0.5*dt*k1_x2);
+    
+    k3_x1 = f_dx1(x1(4,k) + 0.5*dt*k2_x1(4), x2(:,k) + 0.5*dt*k2_x2);
+    k3_x2 = f_dx2(x2(:,k) + 0.5*dt*k2_x2);
+    
+    k4_x1 = f_dx1(x1(4,k) + dt*k3_x1(4), x2(:,k) + dt*k3_x2);
+    k4_x2 = f_dx2(x2(:,k) + dt*k3_x2);
+
+    x1(:, k+1) = x1(:, k) + (dt/6) * (k1_x1 + 2*k2_x1 + 2*k3_x1 + k4_x1);
+    x2(:, k+1) = x2(:, k) + (dt/6) * (k1_x2 + 2*k2_x2 + 2*k3_x2 + k4_x2);
 end
 
 disp('Simulation Logic complete.');
