@@ -5,10 +5,10 @@ function [d_hat_x1, d_hat_x2, d_W_out, Phi] = esn_observer(x1, hat_x1, hat_x2, u
 %   x1: measured position vector [x, y, z, psi]^T
 %   hat_x1: estimated position vector
 %   hat_x2: estimated velocity vector
-%   u_esn: ESN input vector [x1(t); x1(t-td); x1(t-2td); tau(t)] (12x1)
+%   u_esn: ESN input vector [x1(t); x1(t-td); x1(t-2td); tau(t)] (16x1)
 %   Phi_delay: ESN reservoir state at t - td (8x1)
 %   W_out_hat: current ESN output weights (8x4)
-%   W_in: input weights (8x12)
+%   W_in: input weights (8x16)
 %   W_d: reservoir internal weights (8x8)
 %   M0: Inverse of or just nominal Inertia Matrix (4x4)
 %   J: Rotation matrix (4x4)
@@ -37,9 +37,9 @@ function [d_hat_x1, d_hat_x2, d_W_out, Phi] = esn_observer(x1, hat_x1, hat_x2, u
     % g0 is nominal restoring force - assumed zero or compensated beforehand
     g0 = zeros(4,1); 
     
-    % d_hat_x2 = -K2*M0^{-1}*J^T*hat_x1 + M0^{-1}[tau - W_out_hat^T*Phi - g0]
+    % d_hat_x2 = -M0^{-1}*K2*J^T*tilde_x1 + M0^{-1}[tau - W_out_hat^T*Phi - g0]
     invM0 = inv(M0);
-    d_hat_x2 = -K2 * invM0 * J' * hat_x1 + invM0 * (tau - W_out_hat' * Phi - g0);
+    d_hat_x2 = -invM0 * K2 * J' * tilde_x1 + invM0 * (tau - W_out_hat' * Phi - g0);
 
     % 4. Adaptive Law for Output Weights W_out_hat
     % d_W_out_hat = -rho * ( Phi * tilde_x1^T * J + kw * W_out_hat )

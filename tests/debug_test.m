@@ -10,7 +10,7 @@ disp('Initializing TABLF and ESN Simulation...');
 params = blimp_params_init();
 
 % Time Config for integration and ESN
-dt = 0.01;
+dt = 0.05;
 T_end = 25;
 N = floor(T_end / dt);
 t_span = (0:N-1) * dt;
@@ -23,7 +23,7 @@ if delay_steps == 0, delay_steps = 1; end
 
 % Initialize Random Weights
 rng(42); % reproducibility
-W_in = (rand(n_neurons, 16) * 2 - 1);
+W_in = (rand(n_neurons, 12) * 2 - 1);
 W_d = (rand(n_neurons, n_neurons) * 2 - 1);
 
 % Ensure spectral radius of W_d < 1
@@ -118,7 +118,7 @@ for k = 1:N-1
          0,         0,        0, 1];
          
     % Identify ESN inputs u_esn(t)
-    u_esn = zeros(16, 1);
+    u_esn = zeros(12, 1);
     u_esn(1:4) = x1(:, k);
     
     idx_t1 = max(1, k - delay_steps);
@@ -131,18 +131,12 @@ for k = 1:N-1
     if k == 1
         Phi_prev = zeros(8, 1);
         tau_prev = zeros(4, 1);
-        % Prevent the derivative spike by calculating nu_c_0 exactly like tablf_controller does
-        [~, nu_c_0, ~] = tablf_controller( ...
-            x1(:,k), x1_d(:,k), d_x1_d(:,k), d2_x1_d(:,k), ...
-            hat_x2(:,k), zeros(4,1), dt, hat_W_out(:,:,k), zeros(8,1), ...
-            J, M0, K4, kh(:,k), kl(:,k), d_kh(:,k), d_kl(:,k), diag(K3));
-        nu_c_prev = nu_c_0;
+        nu_c_prev = zeros(4, 1);
     else
         Phi_prev = Phi_history(:, max(1, k - delay_steps));
         tau_prev = tau_c(:, k-1);
         nu_c_prev = nu_c_history(:, k-1);
     end
-    u_esn(13:16) = tau_prev;
     
     % 1. Observer Step
     [d_hat_x1, d_hat_x2, d_W_out, Phi_current] = esn_observer(...
@@ -162,11 +156,8 @@ for k = 1:N-1
         hat_x2(:,k), nu_c_prev, dt, hat_W_out(:,:,k), Phi_current, ...
         J, M0, K4, kh(:,k), kl(:,k), d_kh(:,k), d_kl(:,k), diag(K3));
         
-    tau_c(:, k) = tau;
+    tau_c(:, k) = tau; if k<10, fprintf('k=%%d x2(4)=%%.4f hat_x2(4)=%%.4f\n', k, x2(4,k), hat_x2(4,k)); end
     nu_c_history(:, k) = nu_c;
-    if k<10
-        fprintf('k=%d, x2(4)=%.4f, hat_x2(4)=%.4f\n', k, x2(4,k), hat_x2(4,k));
-    end
     
     % --- NaN/Inf CHECK ---
     vars_to_check = {d_hat_x1, d_hat_x2, d_W_out, Phi_current, tau, nu_c};

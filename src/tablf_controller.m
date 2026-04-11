@@ -47,8 +47,9 @@ function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d,
         if kli < 1e-4, kli = 1e-4; end
         
         % Constrain z strictly inside bounds to prevent singularity during numerical integration
-        if z >= khi - 1e-4, z = khi - 1e-4; end
-        if z <= -kli + 1e-4, z = -kli + 1e-4; end
+        max_ratio = 0.90; % Saturate ratio to prevent numeric blowup in explicit Euler
+        if z >= khi * max_ratio, z = khi * max_ratio; end
+        if z <= -kli * max_ratio, z = -kli * max_ratio; end
         
         % 1. Evaluate Term 1 for Lambda
         % num1 = (1-q) * kli^2 * sin(pi*z^2 / (2*kli^2)) + q * khi^2 * sin(pi*z^2 / (2*khi^2))
@@ -70,10 +71,11 @@ function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d,
         
         Lambda(i) = term1 + term2;
         
-        % Default simple Psi directly from the paper (using scaled z1)
-        % For standard Barrier, we push the state back
-        barrier_scaling = (1-q)*kli^2 + q*khi^2;
-        Psi(i) = z / barrier_scaling;
+        % Evaluate Psi as the actual derivative of the TABLF!
+        % V_i = k_i^2 / pi * tan(pi z_i^2 / 2 k_i^2)
+        % dV_i/dz_i = z_i * sec^2(pi z_i^2 / 2 k_i^2) = z_i * (1 + tan^2(pi z_i^2 / 2 k_i^2))
+        theta = pi * z^2 / (2 * ((1-q)*kli^2 + q*khi^2));
+        Psi(i) = z * (1 + tan(theta)^2);
     end
 
     % TABLF Virtual Control
