@@ -11,7 +11,7 @@ params = blimp_params_init();
 
 % Time Config for integration and ESN
 dt = 0.001; % Use finer step 1ms to stabilize bare TABLF without magic limiters
-T_end = 25;
+T_end = 80;
 N = floor(T_end / dt);
 t_span = (0:N-1) * dt;
 
@@ -232,40 +232,62 @@ if exist('divergence_step', 'var') && divergence_step > 0
 end
 
 % Save step-by-step parameters to a separate folder array
+% 3. Calculate ESN Disturbance Estimates
+hat_tau_D = zeros(4, N);
+for k = 1:N
+    hat_tau_D(:, k) = hat_W_out(:,:,k)' * Phi_history(:,k);
+end
+
 data_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
 if ~exist(data_dir, 'dir')
     mkdir(data_dir);
 end
-save(fullfile(data_dir, 'simulation_data.mat'), 't_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d');
+save(fullfile(data_dir, 'simulation_data.mat'), 't_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D');
 
 % Plotting like Fig 4
-fig = figure('Position', [100, 100, 1000, 800], 'Name', 'Reproduction with Mathematical Definitions');
+fig = figure('Position', [100, 100, 1000, 1000], 'Name', 'Reproduction of Multi-Subplots');
+tlo = tiledlayout(3, 1, 'TileSpacing', 'compact');
 
-subplot(2, 2, 1);
-plot3(x1_d(1,:), x1_d(2,:), x1_d(3,:), 'g--', 'LineWidth', 2); hold on;
-plot3(x1(1,:), x1(2,:), x1(3,:), 'k', 'LineWidth', 2);
-grid on; xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
-title('(a) Trajectories of the blimp');
-legend('Desired', 'Proposed (ESN+TABLF)');
-view([-30, 30]);
+% (a) Tracking Errors
+nexttile;
+plot(t_span, x1(1,:) - x1_d(1,:), 'r', 'LineWidth', 1.5); hold on;
+plot(t_span, x1(2,:) - x1_d(2,:), 'g', 'LineWidth', 1.5);
+plot(t_span, x1(3,:) - x1_d(3,:), 'b', 'LineWidth', 1.5);
+plot(t_span, x1(4,:) - x1_d(4,:), 'm', 'LineWidth', 1.5);
+plot(t_span, kh(1,:), 'k--', 'LineWidth', 1.5);
+plot(t_span, -kl(1,:), 'k--', 'LineWidth', 1.5);
+grid on; ylabel('Tracking Errors');
+legend('e_x', 'e_y', 'e_z', 'e_\psi', 'k_h', '-k_l');
+title('(a) Tracking errors');
+xlim([0, T_end]);
 
-subplot(2, 2, 2);
-plot(t_span, x1(1,:) - x1_d(1,:), 'k', 'LineWidth', 2); hold on;
-plot(t_span, kh(1,:), 'c--'); plot(t_span, -kl(1,:), 'c--');
-grid on; xlabel('Time (s)'); ylabel('e_x (m)'); title('Position Error e_x');
+% (b) Control Inputs
+nexttile;
+plot(t_span, tau_c(1,:), 'r', 'LineWidth', 1.5); hold on;
+plot(t_span, tau_c(2,:), 'g', 'LineWidth', 1.5);
+plot(t_span, tau_c(3,:), 'b', 'LineWidth', 1.5);
+plot(t_span, tau_c(4,:), 'm', 'LineWidth', 1.5);
+grid on; ylabel('Control Inputs');
+legend('\tau_u', '\tau_v', '\tau_w', '\tau_\psi', 'NumColumns', 4);
+title('(b) Control inputs');
+xlim([0, T_end]);
 
-subplot(2, 2, 3);
-plot(t_span, x1(3,:) - x1_d(3,:), 'k', 'LineWidth', 2); hold on;
-plot(t_span, kh(3,:), 'c--'); plot(t_span, -kl(3,:), 'c--');
-grid on; xlabel('Time (s)'); ylabel('e_z (m)'); title('Position Error e_z');
+% (c) Disturbance Estimates
+nexttile;
+plot(t_span, hat_tau_D(1,:), 'r', 'LineWidth', 1.5); hold on;
+plot(t_span, hat_tau_D(2,:), 'g', 'LineWidth', 1.5);
+plot(t_span, hat_tau_D(3,:), 'b', 'LineWidth', 1.5);
+plot(t_span, hat_tau_D(4,:), 'm', 'LineWidth', 1.5);
+grid on; xlabel('Time (s)'); ylabel('Disturbance Estimates');
+legend('~d_u', '~d_v', '~d_w', '~d_\psi', 'NumColumns', 4);
+title('(c) Disturbance estimates');
+xlim([0, T_end]);
 
-subplot(2, 2, 4);
-plot(t_span, tau_c(1,:), 'k', 'LineWidth', 2); hold on;
-grid on; xlabel('Time (s)'); ylabel('\tau_u (N)'); title('Control Input \tau_u');
+out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'comparison');
+if ~exist(out_dir, 'dir'), mkdir(out_dir); end
+saveas(fig, fullfile(out_dir, 'simulation_results.png'));
+disp('Plots successfully saved to comparison/simulation_results.png');
 
-out_dir = fullfile('..', 'comparison');
-saveas(fig, fullfile(out_dir, 'closed_loop_esn.png'));
-disp('Plots successfully saved to comparison/closed_loop_esn.png');
 
 
 function p = blimp_params_init()
