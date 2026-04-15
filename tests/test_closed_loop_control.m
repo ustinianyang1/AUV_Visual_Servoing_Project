@@ -30,8 +30,8 @@ W_d = (rand(n_neurons, n_neurons) * 2 - 1);
 sr = max(abs(eig(W_d)));
 W_d = 0.95 * (W_d / sr);
 
-rho = 0; % Disabled adaptive rate temporarily to isolate and tune base controller tracking
-kw = 0.1;
+rho = 0.01; % Extremely gentle adaptive rate to allow ESN to learn steady-state bounds without blowing up the torque
+kw = 0.2; % Higher leakage to prevent aggressive windup
 
 % Controller Gains (Drastically softened to respect 1.4N physical limit)
 K1 = diag([0.5, 0.5, 0.8, 0.2]);
