@@ -340,7 +340,7 @@ for i = 1:4
     nexttile;
     plot(t_span, vars_a{i}, 'b', 'LineWidth', 1.5);
     grid on;
-    ylim(y_limits_a{i});
+    ylim('auto');
     xlim([0, 80]);
     ylabel(ylabels_a{i});
     title(['(a) ', titles_a{i}]);
@@ -355,7 +355,7 @@ for i = 1:4
     nexttile;
     plot(t_span, vars_b{i}, 'r', 'LineWidth', 1.5);
     grid on;
-    ylim([-1.4, 1.4]);
+    ylim('auto');
     xlim([0, 80]);
     ylabel(ylabels_b{i});
     title(['(b) ', titles_b{i}]);
@@ -370,7 +370,7 @@ for i = 1:4
     nexttile;
     plot(t_span, vars_c{i}, 'g', 'LineWidth', 1.5);
     grid on;
-    ylim([-1.4, 1.4]);
+    ylim('auto');
     xlim([0, 80]);
     xlabel('Time (s)');
     ylabel(['$$', ylabels_c{i}, '$$'], 'Interpreter', 'latex');
