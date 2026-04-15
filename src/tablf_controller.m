@@ -1,4 +1,4 @@
-function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d, d2x1d, hat_x2, nu_c_prev, dt, W_out_hat, Phi, J, M0, K4, kh, kl, d_kh, d_kl, K3i)
+function [tau, nu_c, Lambda, hat_z2, dot_nu_c] = tablf_controller(x1, x1d, dx1d, d2x1d, hat_x2, nu_c_prev, dot_nu_c_prev, dt, W_out_hat, Phi, J, M0, K4, kh, kl, d_kh, d_kl, K3i)
 % TABLF_CONTROLLER Evaluates the Tangent Asymmetric Barrier Lyapunov Controller
 %   Implements the asymmetric boundary control and calculates the actual thrust tau.
 %
@@ -9,6 +9,7 @@ function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d,
 %   d2x1d  : Desired acceleration
 %   hat_x2 : Estimated velocity (from ESN)
 %   nu_c_prev : Previous virtual control (to estimate derivative)
+%   dot_nu_c_prev : Previous virtual control derivative for low pass filter
 %   dt     : Time step size
 %   W_out_hat : ESN output weights (8x4)
 %   Phi    : ESN state reservoir (8x1)
@@ -82,7 +83,9 @@ function [tau, nu_c, Lambda, hat_z2, num_term] = tablf_controller(x1, x1d, dx1d,
     nu_c = J' * (Lambda + dx1d);
     
     % Simple Numerical Differentiation for nu_c_dot (robust version)
-    dot_nu_c = (nu_c - nu_c_prev) / dt;
+    dot_nu_c_raw = (nu_c - nu_c_prev) / dt;
+    alpha_filter = 0.05;
+    dot_nu_c = alpha_filter * dot_nu_c_raw + (1 - alpha_filter) * dot_nu_c_prev;
 
     % Estimated Velocity Tracking Error
     hat_z2 = hat_x2 - nu_c;

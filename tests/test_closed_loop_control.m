@@ -57,6 +57,7 @@ d_x1_d = zeros(4, N);
 d2_x1_d = zeros(4, N);
 tau_c = zeros(4, N);
 nu_c_history = zeros(4, N);
+dot_nu_c_history = zeros(4, N);
 
 kh = zeros(4, N);
 kl = zeros(4, N);
@@ -132,15 +133,17 @@ for k = 1:N-1
         Phi_prev = zeros(8, 1);
         tau_prev = zeros(4, 1);
         % Prevent the derivative spike by calculating nu_c_0 exactly like tablf_controller does
-        [~, nu_c_0, ~] = tablf_controller( ...
+        [~, nu_c_0, ~, ~, dot_nu_c_0] = tablf_controller( ...
             x1(:,k), x1_d(:,k), d_x1_d(:,k), d2_x1_d(:,k), ...
-            hat_x2(:,k), zeros(4,1), dt, hat_W_out(:,:,k), zeros(8,1), ...
+            hat_x2(:,k), zeros(4,1), zeros(4,1), dt, hat_W_out(:,:,k), zeros(8,1), ...
             J, M0, K4, kh(:,k), kl(:,k), d_kh(:,k), d_kl(:,k), diag(K3));
         nu_c_prev = nu_c_0;
+        dot_nu_c_prev = dot_nu_c_0;
     else
         Phi_prev = Phi_history(:, max(1, k - delay_steps));
         tau_prev = tau_c(:, k-1);
         nu_c_prev = nu_c_history(:, k-1);
+        dot_nu_c_prev = dot_nu_c_history(:, k-1);
     end
     u_esn(13:16) = tau_prev;
     
@@ -157,13 +160,14 @@ for k = 1:N-1
     hat_W_out(:,:, k+1) = hat_W_out(:,:, k) + d_W_out * dt;
     
     % 2. Controller Step (TABLF)
-    [tau, nu_c, ~] = tablf_controller(...
+    [tau, nu_c, ~, ~, dot_nu_c_current] = tablf_controller(...
         x1(:,k), x1_d(:,k), d_x1_d(:,k), d2_x1_d(:,k), ...
-        hat_x2(:,k), nu_c_prev, dt, hat_W_out(:,:,k), Phi_current, ...
+        hat_x2(:,k), nu_c_prev, dot_nu_c_prev, dt, hat_W_out(:,:,k), Phi_current, ...
         J, M0, K4, kh(:,k), kl(:,k), d_kh(:,k), d_kl(:,k), diag(K3));
         
     tau_c(:, k) = tau;
     nu_c_history(:, k) = nu_c;
+    dot_nu_c_history(:, k) = dot_nu_c_current;
     if k<10
         fprintf('k=%d, x2(4)=%.4f, hat_x2(4)=%.4f\n', k, x2(4,k), hat_x2(4,k));
     end
@@ -252,18 +256,18 @@ end
   % Parameter Bounds based on paper
   bounds = struct();
   bounds.t_span = [0, 100];
-  bounds.x1 = [-5, 5]; % [x, y, z, psi]
-  bounds.x2 = [-2, 2]; % velocities
-  bounds.hat_x1 = [-5, 5];
-  bounds.hat_x2 = [-2, 2];
+  bounds.x1 = [-12, 42]; % [x, y, z, psi]
+  bounds.x2 = [-15, 15]; % velocities
+  bounds.hat_x1 = [-12, 42];
+  bounds.hat_x2 = [-50, 50];
   bounds.tau_c = [-10, 10]; % thrust N
-  bounds.x1_d = [-5, 5];
-  bounds.hat_tau_D = [-2, 2];
+  bounds.x1_d = [-12, 42];
+  bounds.hat_tau_D = [-5, 5];
   bounds.kh = [0, 2];
   bounds.kl = [0, 2];
   bounds.e_v = [-2, 2];
   bounds.tau_v = [-10, 10];
-  bounds.d_v = [-2, 2];
+  bounds.d_v = [-5, 5];
 
   vars_to_save = {'t_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D', 'kh', 'kl', 'e_v', 'tau_v', 'd_v'};
   
@@ -288,6 +292,10 @@ end
       file_path = fullfile(out_dir, [v_name, '.mat']);
       save(file_path, v_name);
   end
+
+fig = figure('Position', [100, 100, 800, 900]);
+tiledlayout(3, 1, 'TileSpacing', 'compact');
+
 nexttile;
 plot(t_span, x1(1,:) - x1_d(1,:), 'r', 'LineWidth', 1.5); hold on;
 plot(t_span, x1(2,:) - x1_d(2,:), 'g', 'LineWidth', 1.5);
