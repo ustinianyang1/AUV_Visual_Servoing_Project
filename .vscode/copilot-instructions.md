@@ -7,7 +7,7 @@
 
 ## 2. 图像评估与复现工作流
 - **强制比对**：每次生成图像后，都必须与 comparison/Adaptive_Output_Feedback_Trajectory_Tracking_Control_of_an_Indoor_Blimp_Controller_Design_and_Experiment_Validation.pdf-0010-02.png 比对并评估效果。
-- **变量合理性检查**：每次运行仿真后，必须检查保存在单独文件夹（如 `data/`）中的主要变量数据是否合理（例如不能包含 `NaN` 或 `Inf`，且数值应在物理限制的合理范围内）。
+- **变量合理性检查**：每次运行仿真项目后，必须检查保存在 `data/` 文件夹中的主要变量数据是否合理。具体要求：不能包含 `NaN` 或 `Inf`，并且其数值必须严格参照 `data/parameter_bounds.md` 文件中规定的范围进行排查。如果参数超越此物理限制范围，视为有异常发散迹象。
 - **效果评估与排查**：如果效果不佳，需要评估当前项目找出可能的原因，并由我决定修改方向。
 
 ---

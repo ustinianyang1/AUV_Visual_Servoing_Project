@@ -238,17 +238,56 @@ for k = 1:N
     hat_tau_D(:, k) = hat_W_out(:,:,k)' * Phi_history(:,k);
 end
 
-data_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
-if ~exist(data_dir, 'dir')
-    mkdir(data_dir);
-end
-save(fullfile(data_dir, 'simulation_data.mat'), 't_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D');
+  % Calculate specifically requested velocity/control/disturbance alias tracking arrays
+  e_v_vec = x2 - nu_c_history;
+  e_v = e_v_vec(2, :);
+  tau_v = tau_c(2, :);
+  d_v = hat_tau_D(2, :);
 
-% Plotting like Fig 4
-fig = figure('Position', [100, 100, 1000, 1000], 'Name', 'Reproduction of Multi-Subplots');
-tlo = tiledlayout(3, 1, 'TileSpacing', 'compact');
+  out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
+  if ~exist(out_dir, 'dir')
+      mkdir(out_dir);
+  end
 
-% (a) Tracking Errors
+  % Parameter Bounds based on paper
+  bounds = struct();
+  bounds.t_span = [0, 100];
+  bounds.x1 = [-5, 5]; % [x, y, z, psi]
+  bounds.x2 = [-2, 2]; % velocities
+  bounds.hat_x1 = [-5, 5];
+  bounds.hat_x2 = [-2, 2];
+  bounds.tau_c = [-10, 10]; % thrust N
+  bounds.x1_d = [-5, 5];
+  bounds.hat_tau_D = [-2, 2];
+  bounds.kh = [0, 2];
+  bounds.kl = [0, 2];
+  bounds.e_v = [-2, 2];
+  bounds.tau_v = [-10, 10];
+  bounds.d_v = [-2, 2];
+
+  vars_to_save = {'t_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D', 'kh', 'kl', 'e_v', 'tau_v', 'd_v'};
+  
+  fprintf('\n--- Parameter Range Validation & Saving ---\n');
+  for i = 1:length(vars_to_save)
+      v_name = vars_to_save{i};
+      v_data = eval(v_name);
+      
+      % Range verification
+      if isfield(bounds, v_name)
+          b = bounds.(v_name);
+          v_min = min(v_data(:));
+          v_max = max(v_data(:));
+          if v_min < b(1) || v_max > b(2)
+              fprintf('! WARNING: %s exceeds bound [%.1f, %.1f] limit. Found [%.2f, %.2f]\n', v_name, b(1), b(2), v_min, v_max);
+          else
+              fprintf('OK: %s within bounds [%.1f, %.1f]. Actual span: [%.2f, %.2f]\n', v_name, b(1), b(2), v_min, v_max);
+          end
+      end
+      
+      % Save individually to comparison/
+      file_path = fullfile(out_dir, [v_name, '.mat']);
+      save(file_path, v_name);
+  end
 nexttile;
 plot(t_span, x1(1,:) - x1_d(1,:), 'r', 'LineWidth', 1.5); hold on;
 plot(t_span, x1(2,:) - x1_d(2,:), 'g', 'LineWidth', 1.5);
