@@ -243,10 +243,20 @@ for k = 1:N
 end
 
   % Calculate specifically requested velocity/control/disturbance alias tracking arrays
-  e_v_vec = x2 - nu_c_history;
-  e_v = e_v_vec(2, :);
-  tau_v = tau_c(2, :);
-  d_v = hat_tau_D(2, :);
+  e_x = x1(1,:) - x1_d(1,:);
+  e_y = x1(2,:) - x1_d(2,:);
+  e_z = x1(3,:) - x1_d(3,:);
+  e_psi = x1(4,:) - x1_d(4,:);
+
+  f_x = tau_c(1, :);
+  f_y = tau_c(2, :);
+  f_z = tau_c(3, :);
+  tau_psi = tau_c(4, :);
+
+  hat_tau_D1 = hat_tau_D(1, :);
+  hat_tau_D2 = hat_tau_D(2, :);
+  hat_tau_D3 = hat_tau_D(3, :);
+  hat_tau_D4 = hat_tau_D(4, :);
 
   out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
   if ~exist(out_dir, 'dir')
@@ -255,21 +265,23 @@ end
 
   % Parameter Bounds based on paper
   bounds = struct();
-  bounds.t_span = [0, 100];
-  bounds.x1 = [-12, 42]; % [x, y, z, psi]
-  bounds.x2 = [-15, 15]; % velocities
-  bounds.hat_x1 = [-12, 42];
-  bounds.hat_x2 = [-50, 50];
-  bounds.tau_c = [-350, 350]; % thrust N
-  bounds.x1_d = [-12, 42];
-  bounds.hat_tau_D = [-4000, 4000];
-  bounds.kh = [0, 2];
-  bounds.kl = [0, 2];
-  bounds.e_v = [-2, 2];
-  bounds.tau_v = [-350, 350];
-  bounds.d_v = [-4000, 4000];
+  bounds.e_x = [-0.2, 0.2];
+  bounds.e_y = [-0.2, 0.2];
+  bounds.e_z = [-0.2, 0.2];
+  bounds.e_psi = [-0.015, 0.015];
+  
+  bounds.f_x = [-1.4, 1.4];
+  bounds.f_y = [-1.4, 1.4];
+  bounds.f_z = [-1.4, 1.4];
+  bounds.tau_psi = [-1.4, 1.4];
+  
+  bounds.hat_tau_D1 = [-1.4, 1.4];
+  bounds.hat_tau_D2 = [-1.4, 1.4];
+  bounds.hat_tau_D3 = [-1.4, 1.4];
+  bounds.hat_tau_D4 = [-1.4, 1.4];
 
-  vars_to_save = {'t_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D', 'kh', 'kl', 'e_v', 'tau_v', 'd_v'};
+  vars_to_save = {'e_x', 'e_y', 'e_z', 'e_psi', 'f_x', 'f_y', 'f_z', 'tau_psi', ...
+                  'hat_tau_D1', 'hat_tau_D2', 'hat_tau_D3', 'hat_tau_D4'};
   
   fprintf('\n--- Parameter Range Validation & Saving ---\n');
   for i = 1:length(vars_to_save)
@@ -282,53 +294,66 @@ end
           v_min = min(v_data(:));
           v_max = max(v_data(:));
           if v_min < b(1) || v_max > b(2)
-              fprintf('! WARNING: %s exceeds bound [%.1f, %.1f] limit. Found [%.2f, %.2f]\n', v_name, b(1), b(2), v_min, v_max);
+              fprintf('! WARNING: %s exceeds bound [%.3f, %.3f] limit. Found [%.3f, %.3f]\n', v_name, b(1), b(2), v_min, v_max);
           else
-              fprintf('OK: %s within bounds [%.1f, %.1f]. Actual span: [%.2f, %.2f]\n', v_name, b(1), b(2), v_min, v_max);
+              fprintf('OK: %s within bounds [%.3f, %.3f]. Actual span: [%.3f, %.3f]\n', v_name, b(1), b(2), v_min, v_max);
           end
       end
       
-      % Save individually to comparison/
+      % Save individually to data/
       file_path = fullfile(out_dir, [v_name, '.mat']);
       save(file_path, v_name);
   end
 
-fig = figure('Position', [100, 100, 800, 900]);
-tiledlayout(3, 1, 'TileSpacing', 'compact');
+fig = figure('Position', [100, 100, 1200, 900]);
+tiledlayout(3, 4, 'TileSpacing', 'compact');
 
-nexttile;
-plot(t_span, x1(1,:) - x1_d(1,:), 'r', 'LineWidth', 1.5); hold on;
-plot(t_span, x1(2,:) - x1_d(2,:), 'g', 'LineWidth', 1.5);
-plot(t_span, x1(3,:) - x1_d(3,:), 'b', 'LineWidth', 1.5);
-plot(t_span, x1(4,:) - x1_d(4,:), 'm', 'LineWidth', 1.5);
-plot(t_span, kh(1,:), 'k--', 'LineWidth', 1.5);
-plot(t_span, -kl(1,:), 'k--', 'LineWidth', 1.5);
-grid on; ylabel('Tracking Errors');
-legend('e_x', 'e_y', 'e_z', 'e_\psi', 'k_h', '-k_l');
-title('(a) Tracking errors');
-xlim([0, T_end]);
+% (a) Tracking Errors
+titles_a = {'e_x', 'e_y', 'e_z', 'e_\psi'};
+ylabels_a = {'e_x (m)', 'e_y (m)', 'e_z (m)', 'e_\psi (rad)'};
+vars_a = {e_x, e_y, e_z, e_psi};
+y_limits_a = {[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2], [-0.015, 0.015]};
+
+for i = 1:4
+    nexttile;
+    plot(t_span, vars_a{i}, 'b', 'LineWidth', 1.5);
+    grid on;
+    ylim(y_limits_a{i});
+    xlim([0, 80]);
+    ylabel(ylabels_a{i});
+    title(['(a) ', titles_a{i}]);
+end
 
 % (b) Control Inputs
-nexttile;
-plot(t_span, tau_c(1,:), 'r', 'LineWidth', 1.5); hold on;
-plot(t_span, tau_c(2,:), 'g', 'LineWidth', 1.5);
-plot(t_span, tau_c(3,:), 'b', 'LineWidth', 1.5);
-plot(t_span, tau_c(4,:), 'm', 'LineWidth', 1.5);
-grid on; ylabel('Control Inputs');
-legend('\tau_u', '\tau_v', '\tau_w', '\tau_\psi', 'NumColumns', 4);
-title('(b) Control inputs');
-xlim([0, T_end]);
+titles_b = {'f_x', 'f_y', 'f_z', '\tau_\psi'};
+ylabels_b = {'f_x (N)', 'f_y (N)', 'f_z (N)', '\tau_\psi (N\cdot m)'};
+vars_b = {f_x, f_y, f_z, tau_psi};
 
-% (c) Disturbance Estimates
-nexttile;
-plot(t_span, hat_tau_D(1,:), 'r', 'LineWidth', 1.5); hold on;
-plot(t_span, hat_tau_D(2,:), 'g', 'LineWidth', 1.5);
-plot(t_span, hat_tau_D(3,:), 'b', 'LineWidth', 1.5);
-plot(t_span, hat_tau_D(4,:), 'm', 'LineWidth', 1.5);
-grid on; xlabel('Time (s)'); ylabel('Disturbance Estimates');
-legend('~d_u', '~d_v', '~d_w', '~d_\psi', 'NumColumns', 4);
-title('(c) Disturbance estimates');
-xlim([0, T_end]);
+for i = 1:4
+    nexttile;
+    plot(t_span, vars_b{i}, 'r', 'LineWidth', 1.5);
+    grid on;
+    ylim([-1.4, 1.4]);
+    xlim([0, 80]);
+    ylabel(ylabels_b{i});
+    title(['(b) ', titles_b{i}]);
+end
+
+% (c) Observer Outputs
+titles_c = {'\hat{\tau}_{D_1}', '\hat{\tau}_{D_2}', '\hat{\tau}_{D_3}', '\hat{\tau}_{D_4}'};
+ylabels_c = {'\hat{\tau}_{D_1} (N)', '\hat{\tau}_{D_2} (N)', '\hat{\tau}_{D_3} (N)', '\hat{\tau}_{D_4} (N\cdot m)'};
+vars_c = {hat_tau_D1, hat_tau_D2, hat_tau_D3, hat_tau_D4};
+
+for i = 1:4
+    nexttile;
+    plot(t_span, vars_c{i}, 'g', 'LineWidth', 1.5);
+    grid on;
+    ylim([-1.4, 1.4]);
+    xlim([0, 80]);
+    xlabel('Time (s)');
+    ylabel(['$$', ylabels_c{i}, '$$'], 'Interpreter', 'latex');
+    title(['(c) $$', titles_c{i}, '$$'], 'Interpreter', 'latex');
+end
 
 out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'comparison');
 if ~exist(out_dir, 'dir'), mkdir(out_dir); end
