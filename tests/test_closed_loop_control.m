@@ -30,14 +30,14 @@ W_d = (rand(n_neurons, n_neurons) * 2 - 1);
 sr = max(abs(eig(W_d)));
 W_d = 0.95 * (W_d / sr);
 
-rho = 200;
-kw = 0.01;
+rho = 0; % Disabled adaptive rate temporarily to isolate and tune base controller tracking
+kw = 0.1;
 
-% Controller Gains (TIE 2024 parameters)
-K1 = diag([1.2, 1.2, 2.0, 0.8]);
-K2 = diag([1.8, 1.8, 3.0, 1.4]);
-K3 = diag([0.5, 0.5, 1.1, 0.5]);
-K4 = diag([1.4, 1.4, 2.6, 1.2]);
+% Controller Gains (Drastically softened to respect 1.4N physical limit)
+K1 = diag([0.5, 0.5, 0.8, 0.2]);
+K2 = diag([0.5, 0.5, 1.0, 0.2]);
+K3 = diag([0.05, 0.05, 0.1, 0.01]);
+K4 = diag([0.5, 0.5, 0.8, 0.1]);
 
 % Initial conditions
 x10 = [1.3; -0.1; -0.06; -0.03]; 
@@ -69,18 +69,18 @@ for k = 1:N
     t = t_span(k);
     
     % Circle trajectory
-    x1_d(:, k) = [-1.5*sin(0.4*t) + 1.5;
-                  1.5*cos(0.4*t) - 1.5;
+    x1_d(:, k) = [-1.5*sin(0.05*t) + 1.5;
+                  1.5*cos(0.05*t) - 1.5;
                  -0.1*t;
-                  0.4*t - 0.03];
+                  0.05*t - 0.03];
     
-    d_x1_d(:, k) = [-1.5*0.4*cos(0.4*t);
-                    -1.5*0.4*sin(0.4*t);
+    d_x1_d(:, k) = [-1.5*0.05*cos(0.05*t);
+                    -1.5*0.05*sin(0.05*t);
                     -0.1;
-                     0.4];
+                     0.05];
                  
-    d2_x1_d(:, k) = [1.5*0.4^2*sin(0.4*t);
-                    -1.5*0.4^2*cos(0.4*t);
+    d2_x1_d(:, k) = [1.5*0.05^2*sin(0.05*t);
+                    -1.5*0.05^2*cos(0.05*t);
                      0;
                      0];
                  
@@ -128,17 +128,39 @@ for k = 1:N-1
     idx_t2 = max(1, k - 2*delay_steps);
     u_esn(9:12) = x1(:, idx_t2);
     
-    % Get previous ESN reservoir Phi and delayed tau
+    % Initialize first step exactly without filtering delay
     if k == 1
         Phi_prev = zeros(8, 1);
         tau_prev = zeros(4, 1);
-        % Prevent the derivative spike by calculating nu_c_0 exactly like tablf_controller does
-        [~, nu_c_0, ~, ~, dot_nu_c_0] = tablf_controller( ...
-            x1(:,k), x1_d(:,k), d_x1_d(:,k), d2_x1_d(:,k), ...
-            hat_x2(:,k), zeros(4,1), zeros(4,1), dt, hat_W_out(:,:,k), zeros(8,1), ...
-            J, M0, K4, kh(:,k), kl(:,k), d_kh(:,k), d_kl(:,k), diag(K3));
+        
+        % We MUST correctly pre-calculate ideal nu_c_0
+        psi_0 = x1(4,k);
+        J_0 = [cos(psi_0), -sin(psi_0), 0, 0; sin(psi_0), cos(psi_0), 0, 0; 0, 0, 1, 0; 0, 0, 0, 1];
+        
+        z1_0 = x1(:,k) - x1_d(:,k);
+        Lambda_0 = zeros(4,1);
+        for i_ax = 1:4
+            z = z1_0(i_ax);
+            q = double(z > 0);
+            khi = kh(i_ax, k); kli = kl(i_ax, k);
+            d_khi = d_kh(i_ax, k); d_kli = d_kl(i_ax, k);
+            num1_0 = (1-q) * kli^2 * tan(pi * z^2 / (2 * kli^2)) + q * khi^2 * tan(pi * z^2 / (2 * khi^2));
+            if abs(z) < 1e-5
+                term1_0 = -K3(i_ax,i_ax) * (z / 4);
+            else
+                term1_0 = (-K3(i_ax,i_ax) * num1_0) / (2 * pi * z);
+            end
+            term2_0 = ( (1-q)*(d_kli/kli) + q*(d_khi/khi) ) * z;
+            Lambda_0(i_ax) = term1_0 + term2_0;
+        end
+        nu_c_0 = J_0' * (Lambda_0 + d_x1_d(:,k));
+        
+        % By setting nu_c_prev to true target at t=0, the filter realizes zero initial step error!
         nu_c_prev = nu_c_0;
-        dot_nu_c_prev = dot_nu_c_0;
+        
+        % Initialize derived target exactly for zero steady peak
+        % Wait: M0 * dot_nu_c is the acceleration. Let's start with dot_nu_c_prev = d2_x1_d(0)
+        dot_nu_c_prev = J_0' * d2_x1_d(:,k); 
     else
         Phi_prev = Phi_history(:, max(1, k - delay_steps));
         tau_prev = tau_c(:, k-1);

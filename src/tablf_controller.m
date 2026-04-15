@@ -80,10 +80,13 @@ function [tau, nu_c, Lambda, hat_z2, dot_nu_c] = tablf_controller(x1, x1d, dx1d,
     end
 
     % TABLF Virtual Control
-    nu_c = J' * (Lambda + dx1d);
+    nu_c_target = J' * (Lambda + dx1d);
     
-    % 严格还原论文物理系统差分，不引入滞后滤波 (Removed unphysical alpha_filter)
-    dot_nu_c = (nu_c - nu_c_prev) / dt;
+    % 恢复真正的低通指令滤波器 (Restored proper command filter)
+    % 这样虚拟控制量和它的导数是物理上匹配并且连续的
+    tau_f = 0.02; % Filter time constant
+    dot_nu_c = (nu_c_target - nu_c_prev) / tau_f;
+    nu_c = nu_c_prev + dot_nu_c * dt;
 
     % Estimated Velocity Tracking Error
     hat_z2 = hat_x2 - nu_c;
