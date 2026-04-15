@@ -260,14 +260,14 @@ end
   bounds.x2 = [-15, 15]; % velocities
   bounds.hat_x1 = [-12, 42];
   bounds.hat_x2 = [-50, 50];
-  bounds.tau_c = [-10, 10]; % thrust N
+  bounds.tau_c = [-350, 350]; % thrust N
   bounds.x1_d = [-12, 42];
-  bounds.hat_tau_D = [-5, 5];
+  bounds.hat_tau_D = [-4000, 4000];
   bounds.kh = [0, 2];
   bounds.kl = [0, 2];
   bounds.e_v = [-2, 2];
-  bounds.tau_v = [-10, 10];
-  bounds.d_v = [-5, 5];
+  bounds.tau_v = [-350, 350];
+  bounds.d_v = [-4000, 4000];
 
   vars_to_save = {'t_span', 'x1', 'x2', 'hat_x1', 'hat_x2', 'tau_c', 'x1_d', 'hat_tau_D', 'kh', 'kl', 'e_v', 'tau_v', 'd_v'};
   

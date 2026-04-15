@@ -82,10 +82,8 @@ function [tau, nu_c, Lambda, hat_z2, dot_nu_c] = tablf_controller(x1, x1d, dx1d,
     % TABLF Virtual Control
     nu_c = J' * (Lambda + dx1d);
     
-    % Simple Numerical Differentiation for nu_c_dot (robust version)
-    dot_nu_c_raw = (nu_c - nu_c_prev) / dt;
-    alpha_filter = 0.05;
-    dot_nu_c = alpha_filter * dot_nu_c_raw + (1 - alpha_filter) * dot_nu_c_prev;
+    % 严格还原论文物理系统差分，不引入滞后滤波 (Removed unphysical alpha_filter)
+    dot_nu_c = (nu_c - nu_c_prev) / dt;
 
     % Estimated Velocity Tracking Error
     hat_z2 = hat_x2 - nu_c;
